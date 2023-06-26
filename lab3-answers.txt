@@ -1,0 +1,73 @@
+In your own words, describe what this lab was about:
+—------------------------------—------------------------------
+
+Our main objective in this lab is to implement a NO STEAL/FORCE policy along with some locking, dead-locking and in general implementing a better buffer management at the page level.
+The components we worked on were:
+BufferPool.java:
+getPage(): this function is updated to implement lock on the requested page before fetching it from disk. So that the transaction obtains the necessary lock before accessing the page. Additionally, we also implemented our deadlock detection and resolution in getPage() method.
+transactionComplete(): We enforced a FORCE policy in this function where we forced the dirty pages to flush to disk after a transaction was committed.
+evictPage(): In this function, we implemented a NO STEAL policy where dirty pages are not evicted from the buffer cache until the corresponding transaction has committed.
+LockManager.java: To implement the locking mechanism correctly in bufferpool, we have a separate class called LockManger.java that does most of the functionalities of implementing a lock on pages correctly.
+acquireLock: this is the primary lock implementation method that can be executed based on two different lock types: sharedLocking and exclusiveLocking. If we have only the permission to ReadOnly pages, we implement sharedLocking, otherwise we implement exclusive locking. For modularity, we made some additional methods but that is the gist.
+releaseALock: To release a lock on a page on one transaction.
+releaseAll: To release all the transaction locks when needed
+holdsLock: to check if the specified transaction has a lock on the specified page
+
+Describe a unit test that could be added to improve the set of unit tests that we provided for this lab.
+—------------------------------—------------------------------—------------------------------—---------------
+
+In testUpgradeWriteDeadlock() we have both T1 and T2 acquire read locks and then both acquire write locks.
+We can construct a test for the scenario when only one transaction wants to acquire a write lock.
+For the new test we could have T1, T2, T3 acquire a read lock on the same page.
+After that, T1 will try to upgrade to a write lock.
+The test should check that T1 can only acquire the write lock after T2 and T3 have released the read locks.
+The test should also handle the situation that if T1 cannot upgrade to a write lock because T2 and T3 still have read locks, it should not cause a deadlock.
+To make sure that happens, T1 should give up trying to acquire the write lock and release all its locks..
+
+
+Describe any design decisions you made, including your deadlock detection policy, locking granularity, etc
+—------------------------------—------------------------------—------------------------------—---------------
+
+We used page based locking granularity.
+We implemented a LockManager to handle the lock management on a page basis (as indicated by using PageId in lock related methods).
+Also, the getPage method acquires a lock on the page before it retrieves it from the buffer pool.
+Page level locking provides a nice balance between concurrency and lock management.
+If we were to lock at the tuple level we could have more concurrency, but the number of locks to manage would be much greater.
+
+We implemented the TimeOut policy. When getPage is first run a timeout value is determined.
+So if the transaction can’t acquire the lock immediately because it is held by another transaction, it begins to wait.
+It goes through a cycle of sleeping and trying to acquire the lock.
+If the cycle is completed and the transaction is still waiting on the lock, it will throw an exception (“TransactionAbortedException”) and then kill the transaction to resolve the apparent deadlock.
+
+Discuss and justify any changes you made to the API.
+—------------------------------—------------------------------—----------
+N/A
+
+If you have any feedback for us on the assignment
+—------------------------------—------------------------------—----------
+N/A
+
+Additional information:
+—------------------------------—--------------------------
+
+We ran the ant systemtest in the terminal, but after 5+ minutes we decided to stop the process and conduct the tests in our IDE (Intellij).
+We ran the results on both of our local machines and got surprising results.
+On machine1 the FiveThread test took over 2 minutes, (2:22) while on machine2 it took less than 5 seconds.
+Then for the TenThread test on machine1 it took less time than the FiveThread test on machine1.
+It also took less time than the same test on machine2.
+Despite that oddity, the remaining test results seem to be inline.
+
+Here's the stats of our runtime:
+Transaction test on Tasnim's Local machine:
+testSingleThread: 96 ms
+testTwoThreads: 270 ms
+testFiveThreads: 3 sec 197 ms
+testTenThreads:3 min 24 s
+testAllDirtyFails: 120 ms
+
+Transaction test on Danno's Local machine:
+testSingleThread: 52 ms
+testTwoThreads: 243 ms
+testFiveThreads: 2 min 22 s
+testTenThreads:2 min 4 s
+testAllDirtyFails: 49 ms

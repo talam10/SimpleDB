@@ -1,0 +1,79 @@
+Q1) Describe your implementation including any design decisions you made.
+Make sure to emphasize anything that was difficult or unexpected.
+----------------------------------------------------------------------
+In the LogFile class, we implemented the rollback(), recover(), and print() methods.
+
+- For rollback(), we just called our helper method after calling preAppend(). In this case,
+  our helper method "update" checks for all kind of record types and only updates the record
+  type when the type value is UPDATE_RECORD. We also make sure under the type CHECKPOINT_RECORD
+  we call raf.readLong() for each raf.readInt().
+  Additionally, we also first the offset of the first log record for the specified transaction by
+  using the tidToFirstLogRecord map. Then, we iterated through the log records starting from the first
+  log record offset. For each log record, if it is an update record and matches the transaction ID, we read the
+  before-image and after-image of the page, write the before-image back to the table
+  file to revert the changes, and discard the page from the buffer pool.
+
+- To implement recover(), we first read the offset of the last valid checkpoint record
+from the log file. Then, we iterated through the log records starting from the last
+checkpoint offset. For each log record type, we assign functionalities based on the
+Int type value. For example, if we have  an abort or commit record type, we add the
+transaction ID to the set of loser transactions. If it is an update record and redo
+is enabled, we read the before-image and after-image of the page. We also make sure
+to have some additional checks like checkpoint record type or begin record type, we
+simple break out of the function. We also assigned a default value where we would assert false
+if we don’t have any type to check. We also had an additional openCommitOpenCrash check where
+for each long Tid, we call logAbort. We call the update() method here as well.
+
+- To implement print(), we simply iterated through the log file and printed out the
+record type and transaction ID for each log record.
+
+- One design decision we made was to use synchronized blocks to ensure thread-safety
+for critical sections of code, such as accessing the buffer pool or updating shared
+variables. This helps prevent race conditions and data inconsistencies in concurrent
+transactions.
+
+- One challenge we encountered was not having the cases for COMMIT_RECORD and
+ABORT_RECORD types. And also, not throwing IO exception as a default behaviour if there’s
+no type to work with. Once, we included those type checks and exception, our code passed
+all the tests that was supposed to be related to LogFile.recover() method.
+
+
+
+Q2) Discuss and justify any changes you made outside of LogFile.java.
+----------------------------------------------------------------------------------
+- The changes we made outside of LogFile.java was in BufferPool.java: the methods:
+transactionComplete(), flushAllPages(), and flushPage().
+
+- In flushPage() we kept it simple and added the suggested changes, where we call
+flushPage() when a dirty page is committed. Before that we also append an update record
+to the log, with a before-image and after-image.
+
+- We changed our old implementation of flushAllPages() method to a new version where it
+calls the flushPage() method for each page id. Since we made all new changes in the
+flushPage() method, it’s better if we just called it into flushAllPages() instead of hard
+coding those changes again.
+
+- We implemented NO FORCE in transactionComplete() method where we didn't call flushPage()
+
+- We also changed the interface for TransactionID class and TransactionID.java where we added an extra transactionID constructor
+that takes long id as a parameter.
+We did this because to abort tids at the end of recover() method in LogFile.java, we had to call new TransactionID(tid) for every long tid
+
+
+
+Q3) Describe a unit test that could be added to improve the set of unit tests that we
+provided for this lab.
+--------------------------------------------------------------------------------------
+- We could create a test that simulates multiple crashes and recoveries. It would test that
+the recovery process can restore the database state after EACH crash. It would perform
+insertions and commits in multiple transactions, then crash the system, restart it, and then
+verify that the system contains all the data that it expects to be there after recovery.
+
+
+Q4) If you have any feedback for us on the assignment, you can add it to the writeup, send us
+an email, or make a note and paste your note in the course evaluation form at the end of the quarter.
+-----------------------------------------------------------------------------------------------------
+
+N/A
+
+
